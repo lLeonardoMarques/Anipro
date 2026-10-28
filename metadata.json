@@ -1,0 +1,6 @@
+{
+  "name": "AnPrice — Análise de Preço",
+  "description": "Pesquise melhor. Pague menos. Compare preços, vendedores e calcule margens de revenda no Mercado Livre com visual profissional e arquitetura modular.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

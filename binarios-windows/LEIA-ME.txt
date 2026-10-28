@@ -1,0 +1,38 @@
+BINARIOS DO WINDOWS PARA PROJETOS NODE (rede corporativa)
+==========================================================
+
+PARA QUE SERVE
+A rede corporativa bloqueia o download dos binarios nativos do npm
+(esbuild, Vite/Rolldown, LightningCSS, Tailwind 4, TypeScript 7...).
+Sintomas: "npm install" falha no esbuild com ECONNRESET, ou termina sem erro
+mas o "npm run dev" mostra "Cannot find native binding".
+Esta pasta tem os pacotes oficiais do npm e um script que os coloca no lugar.
+
+COMO USAR (dentro da pasta do projeto, no PowerShell)
+    npm install --ignore-scripts
+    powershell -ExecutionPolicy Bypass -File "CAMINHO\binarios-windows\restaurar-binarios.ps1"
+    npm run dev
+
+- O "--ignore-scripts" impede que o esbuild tente baixar o binario sozinho
+  e derrube a instalacao inteira.
+- O script le o package-lock.json do projeto, descobre quais binarios ele
+  precisa, confere a assinatura de cada arquivo e instala.
+- Se faltar algum, o script lista quais sao. E so pedir ao Claude.
+
+PACOTES INCLUIDOS
+- esbuild-win32-x64-0.28.2.tgz
+- rolldown-binding-win32-x64-msvc-1.2.15.tgz   (Vite 8.3.x)
+- lightningcss-win32-x64-msvc-1.32.0.tgz
+- lightningcss-win32-x64-msvc-1.33.0.tgz
+- tailwindcss-oxide-win32-x64-msvc-4.3.3.tgz   (Tailwind 4.3.3)
+- typescript-typescript-win32-x64-7.0.2.tgz    (TypeScript 7.0.2)
+
+DICAS
+- Nao apague o package-lock.json do projeto: ele garante que o npm escolha
+  exatamente as versoes que estao nesta pasta.
+- Se o erro voltar sozinho depois de um tempo, o antivirus provavelmente esta
+  apagando os binarios. Nesse caso, peca a TI uma excecao para a pasta.
+- Erros "EBUSY" ou "EPERM" ao apagar node_modules: feche o VS Code e qualquer
+  "npm run dev" aberto antes de apagar a pasta.
+- Voce pode copiar esta pasta para qualquer lugar (ex.: Documentos) e usar em
+  outros projetos.
