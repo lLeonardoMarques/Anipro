@@ -1,4 +1,4 @@
-﻿name: Publicar AnPrice
+name: Publicar AnPrice
 
 on:
   push:
@@ -32,7 +32,7 @@ jobs:
           cache: npm
 
       - name: Instalar dependencias
-        run: npm ci
+        run: npm install --no-audit --no-fund
 
       - name: Compilar
         run: npm run build
