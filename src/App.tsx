@@ -22,7 +22,7 @@ import {
   RenderServerStatus,
 } from './types/marketplace';
 import { MarketplaceService } from './services/marketplaceService';
-import { RenderApiService, RENDER_SERVER_ORIGIN } from './services/renderApiService';
+import { RenderApiService } from './services/renderApiService';
 import { StorageService } from './services/storageService';
 import { Header } from './components/Header';
 import { SearchBar } from './components/SearchBar';
@@ -57,7 +57,7 @@ export default function App() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [errorDetails, setErrorDetails] = useState<string | null>(null);
-  const [isCookieIssue, setIsCookieIssue] = useState<boolean>(false);
+  const [isServerUnreachable, setIsServerUnreachable] = useState<boolean>(false);
 
   // Render Server Authentication & Status
   const [serverStatus, setServerStatus] = useState<RenderServerStatus | null>(null);
@@ -87,13 +87,36 @@ export default function App() {
   // 1. Check Server Status & Load Favorites on mount
   useEffect(() => {
     setFavorites(StorageService.getFavorites());
-    checkServerConnection();
+
+    // Retorno do OAuth do Mercado Livre: /?ml=conectado | /?ml=erro&motivo=...
+    const params = new URLSearchParams(window.location.search);
+    const ml = params.get('ml');
+    let avisoOAuth: string | null = null;
+    if (ml === 'erro') {
+      const motivos: Record<string, string> = {
+        AUTORIZACAO_NEGADA: 'A autorização foi cancelada no Mercado Livre.',
+        STATE_INVALIDO: 'O link de autorização expirou ou já foi usado. Inicie a conexão novamente.',
+        PARAMETROS_AUSENTES: 'O Mercado Livre retornou sem o código de autorização.',
+        TROCA_FALHOU: 'O Mercado Livre recusou a troca do código pelo token. Confira Client ID, Secret e Redirect URI.',
+      };
+      avisoOAuth = motivos[params.get('motivo') || ''] || 'Não foi possível conectar o Mercado Livre.';
+    }
+    if (ml) {
+      params.delete('ml');
+      params.delete('motivo');
+      const resto = params.toString();
+      window.history.replaceState(null, '', window.location.pathname + (resto ? `?${resto}` : '') + window.location.hash);
+    }
+
+    checkServerConnection().then(() => {
+      if (avisoOAuth) setErrorMessage(avisoOAuth);
+    });
   }, []);
 
   const checkServerConnection = async () => {
     setIsLoading(true);
     setErrorMessage(null);
-    setIsCookieIssue(false);
+    setIsServerUnreachable(false);
 
     try {
       const result = await RenderApiService.getStatus();
@@ -108,9 +131,9 @@ export default function App() {
         setServerStatus(result.status || null);
         setIsAdminLoggedIn(false);
 
-        if (result.isCookieOrCorsIssue) {
-          setIsCookieIssue(true);
-          setErrorMessage(result.error || 'Bloqueio de cookies de terceiros entre o domínio da interface e o Render.');
+        if (result.servidorInacessivel) {
+          setIsServerUnreachable(true);
+          setErrorMessage(result.error || 'Servidor inacessível.');
         } else if (result.unauthorized) {
           // Sessão não iniciada: modo normal de teste
           setErrorMessage('Sessão de administrador não encontrada. Faça login para acessar o servidor do Mercado Livre.');
@@ -136,7 +159,7 @@ export default function App() {
     setIsLoading(true);
     setErrorMessage(null);
     setErrorDetails(null);
-    setIsCookieIssue(false);
+    setIsServerUnreachable(false);
     setCurrentQuery(queryToSearch);
 
     try {
@@ -172,9 +195,11 @@ export default function App() {
         setIsAdminLoginOpen(true);
       } else if (!result.success) {
         setProducts([]);
-        setErrorMessage(result.error || 'A API bloqueou a busca ou ocorreu um erro no servidor.');
-        if (result.isCookieOrCorsIssue) {
-          setIsCookieIssue(true);
+        setErrorMessage(result.error || 'Não foi possível concluir a busca.');
+        setErrorDetails(result.detalhes || null);
+        setIsServerUnreachable(Boolean(result.servidorInacessivel));
+        if (result.codigo === 'ML_NAO_CONECTADO' || result.codigo === 'ML_REAUTORIZAR') {
+          setServerStatus((prev) => (prev ? { ...prev, conectado: false } : prev));
         }
       } else {
         setProducts(result.products);
@@ -259,8 +284,8 @@ export default function App() {
   const handleAdminLoginSuccess = async () => {
     setIsAdminLoggedIn(true);
     setIsAdminLoginOpen(false);
+    // checkServerConnection já executa a busca inicial quando a sessão é válida.
     await checkServerConnection();
-    executeSearch(currentQuery, 'live');
   };
 
   // Favorites Handlers
@@ -392,7 +417,7 @@ export default function App() {
         <section className="space-y-4 text-center max-w-3xl mx-auto pt-2">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900 border border-slate-800 text-xs text-lime-400 font-semibold mb-2">
             <span className="w-2 h-2 rounded-full bg-lime-400 animate-ping"></span>
-            Conectado ao Servidor Render: <span className="font-mono text-slate-200">anprice-servidor.onrender.com</span>
+            Servidor AnPrice: <span className="font-mono text-slate-200">{window.location.host}</span>
           </div>
 
           <h1 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight leading-tight">
@@ -400,7 +425,7 @@ export default function App() {
           </h1>
 
           <p className="text-sm sm:text-base text-slate-400 max-w-xl mx-auto">
-            Pesquise produtos e compare preços e vendedores do Mercado Livre diretamente através do seu servidor dedicado com autenticação e cookies protegidos.
+            Pesquise produtos e compare preços e vendedores do Mercado Livre pela API oficial, através do seu servidor dedicado com autenticação e cookies protegidos.
           </p>
 
           <div className="pt-2">
@@ -496,7 +521,7 @@ export default function App() {
               <AlertCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
               <div className="space-y-1">
                 <h3 className="text-sm font-bold text-rose-100">
-                  Aviso do Servidor Render
+                  Aviso do AnPrice
                 </h3>
                 <p className="text-xs text-rose-300 leading-relaxed font-medium">
                   {errorMessage}
@@ -509,32 +534,20 @@ export default function App() {
               </div>
             </div>
 
-            {/* Explanation of Third-Party Cookies Blocking between UI domain and onrender.com */}
-            {isCookieIssue && (
-              <div className="bg-black/40 p-3 rounded-xl border border-rose-500/30 text-xs text-slate-300 space-y-2">
-                <strong className="text-amber-300 flex items-center gap-1.5">
-                  <Info className="w-4 h-4 text-amber-400" />
-                  Diagnóstico: Bloqueio de Cookies de Terceiros entre Domínios
-                </strong>
-                <p className="text-[11px] text-slate-300 leading-relaxed">
-                  A interface web atual e o servidor <code className="font-mono text-amber-200">{RENDER_SERVER_ORIGIN}</code> operam em domínios diferentes. Navegadores modernos frequentemente barram cookies cross-origin sem certificados CORS explícitos.
-                </p>
-                <div className="flex flex-wrap items-center gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      RenderApiService.setUseProxy(true);
-                      checkServerConnection();
-                    }}
-                    className="px-3 py-1.5 rounded-lg bg-lime-400 hover:bg-lime-300 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition-colors"
-                  >
-                    <Server className="w-3.5 h-3.5" />
-                    Ativar Modo Túnel Seguro (Proxy)
-                  </button>
-                  <span className="text-[11px] text-slate-400">
-                    Encaminha as requisições pelo servidor sem conflitos de cookies.
-                  </span>
-                </div>
+            {isServerUnreachable && (
+              <div className="bg-black/40 p-3 rounded-xl border border-rose-500/30 text-xs text-slate-300 flex flex-wrap items-center gap-2">
+                <Info className="w-4 h-4 text-amber-400 shrink-0" />
+                <span className="text-[11px] flex-1 min-w-[200px]">
+                  O servidor pode estar iniciando (plano gratuito do Render hiberna após inatividade).
+                </span>
+                <button
+                  type="button"
+                  onClick={() => checkServerConnection()}
+                  className="px-3 py-1.5 rounded-lg bg-lime-400 hover:bg-lime-300 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition-colors"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Tentar novamente
+                </button>
               </div>
             )}
 

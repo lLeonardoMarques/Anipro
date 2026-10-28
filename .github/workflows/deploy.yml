@@ -1,5 +1,11 @@
 name: Publicar AnPrice
 
+# O app (frontend + API) roda no Render, na mesma origem.
+# Este workflow:
+#   1. verifica tipos e compila o frontend com `npm ci` (falha cedo se o lock estiver inconsistente);
+#   2. publica no GitHub Pages apenas uma página que redireciona para o Render;
+#   3. dispara o deploy do Render, se o segredo RENDER_DEPLOY_HOOK estiver configurado.
+
 on:
   push:
     branches: [main]
@@ -11,40 +17,58 @@ permissions:
   id-token: write
 
 concurrency:
-  group: github-pages
+  group: anprice-deploy
   cancel-in-progress: true
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 22
           cache: npm
 
       - name: Instalar dependencias
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
+
+      - name: Verificar tipos
+        run: npm run lint
 
       - name: Compilar
         run: npm run build
 
-      - name: Configurar Pages
-        uses: actions/configure-pages@v5
+  pages:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
 
-      - name: Enviar arquivos
-        uses: actions/upload-pages-artifact@v4
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v4
         with:
-          path: ./dist
+          path: ./pages-redirect
 
-      - name: Publicar
-        id: deployment
+      - id: deployment
         uses: actions/deploy-pages@v4
+
+  render:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Disparar deploy no Render
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "RENDER_DEPLOY_HOOK não configurado; faça Manual Deploy no Render."
+            exit 0
+          fi
+          curl -fsS -X POST "$HOOK" > /dev/null
+          echo "Deploy do Render solicitado."

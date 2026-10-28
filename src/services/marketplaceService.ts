@@ -1,13 +1,9 @@
 /**
  * AnPrice — Serviço Modular de Marketplace
- * Abstrai consultas ao backend, cache e suporte a múltiplos provedores
+ * Catálogo de demonstração e cálculos de análise de preços
  */
 
-import {
-  MarketplaceProduct,
-  PriceAnalysisSummary,
-  ApiStatusResponse,
-} from '../types/marketplace';
+import { MarketplaceProduct, PriceAnalysisSummary } from '../types/marketplace';
 import { searchDemoProducts } from '../mock/demoProducts';
 
 export interface SearchResultResponse {
@@ -21,60 +17,6 @@ export interface SearchResultResponse {
 }
 
 export class MarketplaceService {
-  /**
-   * Consulta status de conexão e credenciais da API no servidor
-   */
-  static async checkApiStatus(): Promise<ApiStatusResponse> {
-    try {
-      const response = await fetch('/api/status');
-      if (response.ok) {
-        return await response.json();
-      }
-      return {
-        configured: false,
-        mode: 'demo',
-        hasClientId: false,
-        hasClientSecret: false,
-        hasAccessToken: false,
-        message: 'Servidor respondeu com status inesperado.',
-        officialDocUrl: 'https://developers.mercadolivre.com.br/pt_br/guia-de-inicio',
-      };
-    } catch (err: any) {
-      return {
-        configured: false,
-        mode: 'demo',
-        hasClientId: false,
-        hasClientSecret: false,
-        hasAccessToken: false,
-        message: `Não foi possível verificar status da API: ${err.message}`,
-        officialDocUrl: 'https://developers.mercadolivre.com.br/pt_br/guia-de-inicio',
-      };
-    }
-  }
-
-  /**
-   * Testa credenciais no servidor
-   */
-  static async testCredentials(payload: {
-    clientId?: string;
-    clientSecret?: string;
-    accessToken?: string;
-  }): Promise<{ success: boolean; message: string }> {
-    try {
-      const response = await fetch('/api/config-test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      return await response.json();
-    } catch (err: any) {
-      return {
-        success: false,
-        message: `Falha na requisição: ${err.message}`,
-      };
-    }
-  }
-
   /**
    * Executa busca de produtos no modo selecionado (Oficial ou Demonstração)
    */
@@ -98,79 +40,15 @@ export class MarketplaceService {
       };
     }
 
-    // 2. Se modo for 'live', consulta o backend seguro do Mercado Livre
-    try {
-      const url = `/api/search?q=${encodeURIComponent(trimmedQuery)}&mode=live`;
-      const response = await fetch(url);
-
-      if (response.status === 429) {
-        const errorData = await response.json();
-        return {
-          products: [],
-          source: 'live',
-          query: trimmedQuery,
-          lastQueryDate: now,
-          totalFound: 0,
-          error: errorData.message || 'Limite de requisições por minuto atingido no Mercado Livre (Erro 429). Aguarde alguns instantes.',
-        };
-      }
-
-      if (response.status === 401 || response.status === 403) {
-        const errorData = await response.json();
-        return {
-          products: [],
-          source: 'live',
-          query: trimmedQuery,
-          lastQueryDate: now,
-          totalFound: 0,
-          error: 'A API oficial do Mercado Livre requer autenticação por aplicativo (App ID e Secret ou Access Token).',
-          errorDetails: errorData.details,
-        };
-      }
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        return {
-          products: [],
-          source: 'live',
-          query: trimmedQuery,
-          lastQueryDate: now,
-          totalFound: 0,
-          error: errorData.message || `Erro ao consultar a API (${response.status})`,
-        };
-      }
-
-      const data = await response.json();
-      return {
-        products: data.results || [],
-        source: 'live',
-        query: trimmedQuery,
-        lastQueryDate: data.timestamp || now,
-        totalFound: data.total || (data.results?.length ?? 0),
-      };
-    } catch (err: any) {
-      return {
-        products: [],
-        source: 'live',
-        query: trimmedQuery,
-        lastQueryDate: now,
-        totalFound: 0,
-        error: `Falha de rede ao consultar o servidor: ${err.message}`,
-      };
-    }
-  }
-
-  /**
-   * Obtém detalhes de um item
-   */
-  static async getItemDetails(itemId: string): Promise<any> {
-    try {
-      const response = await fetch(`/api/items/${itemId}`);
-      if (!response.ok) return null;
-      return await response.json();
-    } catch {
-      return null;
-    }
+    // 2. O modo 'live' é atendido por RenderApiService.buscar (servidor AnPrice).
+    return {
+      products: [],
+      source: 'live',
+      query: trimmedQuery,
+      lastQueryDate: now,
+      totalFound: 0,
+      error: 'Busca ao vivo é feita pelo servidor AnPrice (RenderApiService.buscar).',
+    };
   }
 
   /**

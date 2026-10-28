@@ -14,7 +14,7 @@ import {
   HelpCircle,
 } from 'lucide-react';
 import { RenderServerStatus } from '../types/marketplace';
-import { RenderApiService, RENDER_SERVER_ORIGIN } from '../services/renderApiService';
+import { RenderApiService, DiagnosticoEndpoint } from '../services/renderApiService';
 
 interface ApiConfigModalProps {
   isOpen: boolean;
@@ -41,15 +41,29 @@ export const ApiConfigModal: React.FC<ApiConfigModalProps> = ({
   onRefreshStatus,
   onSelectDemoMode,
 }) => {
-  const [useProxy, setUseProxy] = useState<boolean>(RenderApiService.isUsingProxy());
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [diagnostico, setDiagnostico] = useState<DiagnosticoEndpoint[] | null>(null);
+  const [diagnosticoErro, setDiagnosticoErro] = useState<string | null>(null);
+  const [diagnosticando, setDiagnosticando] = useState(false);
 
   if (!isOpen) return null;
 
-  const handleToggleProxy = (enable: boolean) => {
-    setUseProxy(enable);
-    RenderApiService.setUseProxy(enable);
-    onRefreshStatus();
+  const handleDiagnostico = async () => {
+    setDiagnosticando(true);
+    setDiagnosticoErro(null);
+    const r = await RenderApiService.diagnosticarEndpoints();
+    if (r.success) setDiagnostico(r.resultados || []);
+    else setDiagnosticoErro(r.error || 'Não foi possível executar o diagnóstico.');
+    setDiagnosticando(false);
+  };
+
+  const rotuloCodigo = (codigo: string) => {
+    if (codigo === 'OK') return { texto: 'Liberado', cor: 'text-emerald-400' };
+    if (codigo === 'ML_BLOQUEADO_POLITICA') return { texto: 'Bloqueado (política)', cor: 'text-rose-400' };
+    if (codigo === 'ML_SEM_PERMISSAO') return { texto: 'Sem permissão', cor: 'text-rose-400' };
+    if (codigo === 'NAO_TESTADO') return { texto: 'Não testado', cor: 'text-slate-500' };
+    if (codigo === 'ML_NAO_ENCONTRADO') return { texto: 'Não encontrado', cor: 'text-amber-400' };
+    return { texto: codigo, cor: 'text-amber-400' };
   };
 
   const handleManualRefresh = async () => {
@@ -69,10 +83,10 @@ export const ApiConfigModal: React.FC<ApiConfigModalProps> = ({
             </span>
             <div>
               <h2 className="text-base sm:text-lg font-bold text-white">
-                Integração do Servidor AnPrice (Render)
+                Integração do Servidor AnPrice
               </h2>
               <p className="text-xs text-slate-400 font-mono">
-                {RENDER_SERVER_ORIGIN}
+                {window.location.origin}
               </p>
             </div>
           </div>
@@ -115,7 +129,7 @@ export const ApiConfigModal: React.FC<ApiConfigModalProps> = ({
                     }`}
                   />
                   <strong className="text-white">
-                    {isAdminLoggedIn ? 'Autenticado (Cookie Ativo)' : 'Não Autenticado'}
+                    {isAdminLoggedIn ? 'Autenticado' : 'Não Autenticado'}
                   </strong>
                 </div>
                 {!isAdminLoggedIn ? (
@@ -156,7 +170,7 @@ export const ApiConfigModal: React.FC<ApiConfigModalProps> = ({
                     {serverStatus?.conectado ? 'Conectada à API Oficial' : 'Desconectada'}
                   </strong>
                 </div>
-                {isAdminLoggedIn && !serverStatus?.conectado && (
+                {isAdminLoggedIn && (
                   <button
                     type="button"
                     onClick={() => {
@@ -167,7 +181,7 @@ export const ApiConfigModal: React.FC<ApiConfigModalProps> = ({
                     className="text-amber-400 underline font-semibold text-[11px] flex items-center gap-1 pt-1"
                   >
                     <ExternalLink className="w-3 h-3" />
-                    Conectar Mercado Livre (OAuth)
+                    {serverStatus?.conectado ? 'Reconectar Mercado Livre (OAuth)' : 'Conectar Mercado Livre (OAuth)'}
                   </button>
                 )}
               </div>
@@ -180,62 +194,55 @@ export const ApiConfigModal: React.FC<ApiConfigModalProps> = ({
             )}
           </div>
 
-          {/* Controle de Método de Transporte e Explicação de Cookies */}
+          {/* Diagnóstico de acesso à API do Mercado Livre */}
           <div className="bg-[#0D1836] border border-slate-800 rounded-xl p-4 space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
                 <HelpCircle className="w-4 h-4 text-lime-400" />
-                Diagnóstico de Cookies de Terceiros e CORS
+                Diagnóstico da API do Mercado Livre
               </span>
-              <span className="text-[11px] px-2 py-0.5 rounded bg-slate-800 text-lime-400 font-mono">
-                {useProxy ? 'Túnel /render-api' : 'Direto no Render'}
-              </span>
+              <button
+                type="button"
+                onClick={handleDiagnostico}
+                disabled={!isAdminLoggedIn || !serverStatus?.conectado || diagnosticando || serverStatus?.diagnosticoAtivo === false}
+                className="text-xs px-3 py-1.5 rounded-lg bg-lime-400 text-slate-950 font-bold disabled:opacity-40 flex items-center gap-1.5"
+              >
+                <RefreshCw className={`w-3 h-3 ${diagnosticando ? 'animate-spin' : ''}`} />
+                {diagnosticando ? 'Testando...' : 'Executar diagnóstico'}
+              </button>
             </div>
 
-            <p className="text-xs text-slate-300 leading-relaxed">
-              O AnPrice envia <code className="font-mono text-lime-300">credentials: "include"</code> em todas as 5 rotas para que os cookies de sessão sejam preservados.
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              Testa, com o token salvo no servidor, quais endpoints oficiais estão liberados para esta aplicação.
+              Só status e códigos são exibidos — nenhum dado de anúncio ou token sai do servidor.
+              {serverStatus?.diagnosticoAtivo === false && ' (Desativado no servidor.)'}
             </p>
 
-            <div className="p-3 rounded-lg bg-[#060D1E] border border-slate-800 text-xs space-y-2">
-              <strong className="text-amber-300 block">
-                Se a sessão falhar com erro de rede ou 401 constante:
-              </strong>
-              <p className="text-slate-400 text-[11px] leading-normal">
-                Navegadores atuais bloqueiam cookies cruzados entre domínios diferentes (como <code className="text-slate-300">run.app</code> e <code className="text-slate-300">onrender.com</code>). Para garantir funcionamento imediato sem alterar configurações do navegador, utilize o <strong>Modo Túnel Seguro</strong>.
-              </p>
+            {diagnosticoErro && (
+              <p className="text-[11px] text-rose-300 bg-rose-950/30 p-2 rounded-lg border border-rose-500/30">{diagnosticoErro}</p>
+            )}
 
-              <div className="grid grid-cols-2 gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => handleToggleProxy(false)}
-                  className={`py-2 px-3 rounded-lg border text-xs font-medium transition-colors ${
-                    !useProxy
-                      ? 'bg-lime-400/20 border-lime-400 text-lime-300 font-bold'
-                      : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
-                  }`}
-                >
-                  Conexão Direta (Render)
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleToggleProxy(true)}
-                  className={`py-2 px-3 rounded-lg border text-xs font-medium transition-colors ${
-                    useProxy
-                      ? 'bg-lime-400/20 border-lime-400 text-lime-300 font-bold'
-                      : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
-                  }`}
-                >
-                  Modo Túnel Seguro (Proxy)
-                </button>
+            {diagnostico && (
+              <div className="border border-slate-800 rounded-lg overflow-hidden divide-y divide-slate-800/80 text-[11px]">
+                {diagnostico.map((d) => {
+                  const r = rotuloCodigo(d.codigo);
+                  return (
+                    <div key={d.endpoint} className="p-2 bg-[#060D1E] flex items-center justify-between gap-2">
+                      <span className="font-mono text-slate-200 break-all">{d.endpoint}</span>
+                      <span className={`font-semibold whitespace-nowrap ${r.cor}`}>
+                        {d.status ?? '—'} · {r.texto}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
-            </div>
+            )}
           </div>
 
           {/* Tabela de Rotas Integradas */}
           <div className="space-y-2">
             <h4 className="text-xs font-bold text-white uppercase tracking-wider">
-              Mapeamento das 5 Rotas da API
+              Rotas da API
             </h4>
 
             <div className="border border-slate-800 rounded-xl overflow-hidden divide-y divide-slate-800/80 text-xs">
@@ -248,7 +255,7 @@ export const ApiConfigModal: React.FC<ApiConfigModalProps> = ({
                   </p>
                 </div>
                 <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">
-                  credentials: include
+                  mesma origem
                 </span>
               </div>
 
@@ -261,7 +268,7 @@ export const ApiConfigModal: React.FC<ApiConfigModalProps> = ({
                   </p>
                 </div>
                 <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">
-                  credentials: include
+                  mesma origem
                 </span>
               </div>
 
@@ -274,7 +281,7 @@ export const ApiConfigModal: React.FC<ApiConfigModalProps> = ({
                   </p>
                 </div>
                 <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">
-                  credentials: include
+                  mesma origem
                 </span>
               </div>
 
@@ -287,7 +294,7 @@ export const ApiConfigModal: React.FC<ApiConfigModalProps> = ({
                   </p>
                 </div>
                 <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">
-                  credentials: include
+                  mesma origem
                 </span>
               </div>
 
@@ -300,7 +307,7 @@ export const ApiConfigModal: React.FC<ApiConfigModalProps> = ({
                   </p>
                 </div>
                 <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">
-                  credentials: include
+                  mesma origem
                 </span>
               </div>
             </div>

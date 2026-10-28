@@ -116,12 +116,13 @@ export interface ApiStatusResponse {
   officialDocUrl: string;
 }
 
-// Modelos específicos da API do Servidor Render (https://anprice-servidor.onrender.com)
+// Modelos da API do servidor AnPrice (mesma origem do frontend)
 export interface RenderServerStatus {
   conectado: boolean;
   adminLogado: boolean;
   usuario?: string | null;
   mensagem?: string | null;
+  diagnosticoAtivo?: boolean;
   raw?: any;
 }
 
@@ -129,7 +130,10 @@ export interface RenderSearchResponse {
   consulta: string;
   consultadoEm: string;
   resultados: any[];
-  totalInformado: number;
+  totalInformado: number | null;
+  fonte?: 'catalogo' | 'busca_site';
+  tentativas?: { endpoint: string; codigo: string; status?: number | null }[];
+  cache?: boolean;
   erro?: string;
   mensagem?: string;
 }
