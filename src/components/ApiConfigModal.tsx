@@ -45,13 +45,14 @@ export const ApiConfigModal: React.FC<ApiConfigModalProps> = ({
   const [diagnostico, setDiagnostico] = useState<DiagnosticoEndpoint[] | null>(null);
   const [diagnosticoErro, setDiagnosticoErro] = useState<string | null>(null);
   const [diagnosticando, setDiagnosticando] = useState(false);
+  const [referencia, setReferencia] = useState('');
 
   if (!isOpen) return null;
 
   const handleDiagnostico = async () => {
     setDiagnosticando(true);
     setDiagnosticoErro(null);
-    const r = await RenderApiService.diagnosticarEndpoints();
+    const r = await RenderApiService.diagnosticarEndpoints(referencia);
     if (r.success) setDiagnostico(r.resultados || []);
     else setDiagnosticoErro(r.error || 'Não foi possível executar o diagnóstico.');
     setDiagnosticando(false);
@@ -217,6 +218,25 @@ export const ApiConfigModal: React.FC<ApiConfigModalProps> = ({
               Só status e códigos são exibidos — nenhum dado de anúncio ou token sai do servidor.
               {serverStatus?.diagnosticoAtivo === false && ' (Desativado no servidor.)'}
             </p>
+
+            <label className="block space-y-1">
+              <span className="text-[11px] font-semibold text-slate-300">
+                Link de um anúncio do Mercado Livre (opcional)
+              </span>
+              <input
+                type="text"
+                value={referencia}
+                onChange={(e) => setReferencia(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !diagnosticando) handleDiagnostico();
+                }}
+                placeholder="https://produto.mercadolivre.com.br/MLB-... ou MLB1234567890"
+                className="w-full bg-[#060D1E] border border-slate-700 focus:border-lime-400 rounded-lg px-3 py-2 text-[11px] text-white placeholder-slate-500 focus:outline-none font-mono"
+              />
+              <span className="text-[10px] text-slate-500 block">
+                Com a busca bloqueada, o link permite testar as consultas por anúncio, produto e vendedor.
+              </span>
+            </label>
 
             {diagnosticoErro && (
               <p className="text-[11px] text-rose-300 bg-rose-950/30 p-2 rounded-lg border border-rose-500/30">{diagnosticoErro}</p>

@@ -204,12 +204,15 @@ export class RenderApiService {
     }
   }
 
-  /** GET /api/diagnostico/endpoints — só status e códigos, sem dados. */
-  public static async diagnosticarEndpoints(): Promise<
+  /** GET /api/diagnostico/endpoints[?ref=link-ou-código] — só status e códigos, sem dados. */
+  public static async diagnosticarEndpoints(referencia?: string): Promise<
     { success: boolean; resultados?: DiagnosticoEndpoint[]; executadoEm?: string } & ApiErro
   > {
     try {
-      const response = await chamar('/api/diagnostico/endpoints');
+      const ref = (referencia || '').trim();
+      const response = await chamar(
+        '/api/diagnostico/endpoints' + (ref ? `?ref=${encodeURIComponent(ref)}` : '')
+      );
       if (!response.ok) return { success: false, ...(await lerErro(response)) };
       const data = await response.json();
       return { success: true, resultados: data.resultados || [], executadoEm: data.executadoEm };
